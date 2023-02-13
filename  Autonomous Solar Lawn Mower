@@ -1,0 +1,225 @@
+#include <SoftwareSerial.h>
+#define BTTX 12 
+#define BTRX 11
+SoftwareSerial SerialBT(BTTX, BTRX); 
+
+// Maximum distance we want to ping for (in centimeters).
+#define max_distance 30
+
+bool retry = false;
+int pwm_value = 255;
+int cutter_pwm = 25;
+
+const int trigPin = 9;
+const int echoPin = 10;
+long duration;
+int distance;
+long duration2;
+int distance2;
+String checker;
+
+// Motor A connections
+int enA = 7;
+int in1 = 6;
+int in2 = 5;
+// Motor B connections
+int enB = 4;
+int in3 = 3;
+int in4 = 2;
+
+const int mosfet_pin = 8;
+
+char t;
+
+void setup()
+{
+  Serial.begin(9600);
+  SerialBT.begin(9600);
+  Serial.println("boot");
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+
+  pinMode(enA, OUTPUT);
+  pinMode(enB, OUTPUT);
+  pinMode(in1, OUTPUT);
+  pinMode(in2, OUTPUT);
+  pinMode(in3, OUTPUT);
+  pinMode(in4, OUTPUT);
+  pinMode(mosfet_pin, OUTPUT);
+
+  analogWrite(enA, pwm_value);
+  analogWrite(enB, pwm_value);
+ digitalWrite(mosfet_pin, LOW);
+
+  // Turn off motors - Initial state
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, LOW);
+
+
+
+}
+void moveforward(bool changer = false) {
+  // Turn on motor A & B
+  if (changer == true) {
+    retry = ! retry;
+  }
+  digitalWrite(in1, HIGH);
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, HIGH);
+  digitalWrite(in4, LOW);
+}
+
+void changedirection() {
+  digitalWrite(in1, LOW); //stop
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, LOW);
+  delay(500);
+  digitalWrite(in1, LOW); //move back
+  digitalWrite(in2, HIGH);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, HIGH);
+  delay(500);
+  digitalWrite(in1, LOW); //stop
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, LOW);
+  delay(100);
+  if (retry == false) {
+    digitalWrite(in1, LOW);//move back -left
+    digitalWrite(in2, LOW);
+    digitalWrite(in3, LOW);
+    digitalWrite(in4, HIGH);
+    delay(700);
+
+    digitalWrite(in1, LOW);//stop
+    digitalWrite(in2, LOW);
+    digitalWrite(in3, LOW);
+    digitalWrite(in4, LOW);
+    delay(200);
+
+    moveforward(true);
+  } else if (retry == true) {
+    digitalWrite(in1, LOW);//move back-right
+    digitalWrite(in2, HIGH);
+    digitalWrite(in3, LOW);
+    digitalWrite(in4, LOW);
+    delay(700);
+
+    digitalWrite(in1, LOW);//stop
+    digitalWrite(in2, LOW);
+    digitalWrite(in3, LOW);
+    digitalWrite(in4, LOW);
+    delay(200);
+
+    moveforward(true);
+  }
+
+}
+
+void movestop() {
+  digitalWrite(in1, LOW);//stop
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, LOW);
+}
+
+void movebackward() {
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, HIGH);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, HIGH);
+}
+
+void moveleft() {
+  digitalWrite(in1, HIGH);
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, HIGH);
+}
+
+void moveright() {
+    digitalWrite(in1, LOW);
+  digitalWrite(in2, HIGH);
+  digitalWrite(in3, HIGH);
+  digitalWrite(in4, LOW);
+}
+
+
+void loop()
+{
+  if (SerialBT.available()) {
+    t = SerialBT.read();
+    Serial.println(t);
+Serial.write(SerialBT.read());
+  }
+  checker = String(t);
+  if (checker.startsWith("CS")) {
+    checker.trim();
+    String sub = checker.substring(2, checker.length());
+    cutter_pwm = sub.toInt();
+    if (cutter_pwm > 255) {
+      cutter_pwm = 255;
+    } else if (cutter_pwm < 0) {
+      cutter_pwm = 0;
+    }
+    analogWrite(mosfet_pin, cutter_pwm);
+  } else if (checker.startsWith("MS")) {
+    checker.trim();
+    String sub = checker.substring(2, checker.length());
+    pwm_value = sub.toInt();
+        if (pwm_value > 255) {
+      pwm_value = 255;
+    } else if (pwm_value < 0) {
+      pwm_value = 0;
+    }
+    analogWrite(enA, pwm_value);
+    analogWrite(enB, pwm_value);
+  }
+  if (t == 'F') {          //move forward(all motors rotate in forward direction)
+    moveforward();
+  } else if (t == 'B') {    //move reverse (all motors rotate in reverse direction)
+    movebackward();
+  } else if (t == 'L') {    //turn right (left side motors rotate in forward direction, right side motors rotate in reverse direction for 100ms & stop)
+    moveleft();
+    delay(100);
+    t = 'S';
+  } else if (t == 'R') {    //turn left (right side motors rotate in forward direction, left side motors rotate in reverse direction for 100ms & stop)
+    moveright();
+    delay(100);
+    t = 'S';
+  } else if (t == 'S') {    //STOP (all motors stop)
+    movestop();
+  } else if (t == 'A') {
+    digitalWrite(trigPin, LOW);
+    delayMicroseconds(2);
+    digitalWrite(trigPin, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trigPin, LOW);
+
+    // Measure the response from the HC-SR04 Echo Pin
+    duration = pulseIn(echoPin, HIGH);
+//    duration2 = pulseIn(echoPin1, HIGH);
+
+    // Determine distance from duration
+    // Use 343 metres per second as speed of sound
+    distance = duration * 0.034 / 2;
+//    distance2 = duration2 * 0.0342 / 2;
+    //
+    //    distance = duration / 58.2;   // convert to distance
+    //  distance2 = duration2 /58.2;
+
+    if (distance < max_distance && distance > 1 ) {
+      changedirection();
+
+    } else {
+      moveforward();
+    }
+
+  } else if (t == 'N') {
+    digitalWrite(mosfet_pin, HIGH);
+  }else if (t == 'O') {
+    digitalWrite(mosfet_p
+}
